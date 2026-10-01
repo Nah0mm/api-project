@@ -53,12 +53,12 @@ func (s *Server) StartWorkers() {
 			for job := range s.jobs {
 				fmt.Printf("Worker %d processing job %s\n", id, job.ID)
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := s.apiClient.Process(ctx, job); err != nil {
+				err := s.apiClient.Process(ctx, job)
+				cancel()
+				if err != nil {
 					fmt.Printf("Error calling external API on job %s", job.ID)
 					continue
 				}
-
 				fmt.Printf("Worker %d finished job %s\n", id, job.ID)
 			}
 		}(i)
