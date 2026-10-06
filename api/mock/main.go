@@ -30,7 +30,7 @@ func main() {
 		)
 
 		select {
-		case <-time.After(4 * time.Second):
+		case <-time.After(6 * time.Second):
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]string{
 				"status": "processed",

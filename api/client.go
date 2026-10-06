@@ -9,23 +9,22 @@ import (
 	"net/http"
 )
 
-type APIClient struct {
+type ApiClient struct {
 	client  *http.Client
 	baseURL string
 }
 
-func NewAPIClient(baseURL string) *APIClient {
-	return &APIClient{
+func NewApiClient(baseURL string) *ApiClient {
+	return &ApiClient{
 		client:  &http.Client{},
 		baseURL: baseURL,
 	}
 }
 
-func (ac *APIClient) Process(ctx context.Context, job model.Job) error {
+func (ac *ApiClient) Process(ctx context.Context, job model.Job) error {
 	body, err := json.Marshal(job)
 	if err != nil {
-		return fmt.Errorf("Error marshalling job\n%v\n", err)
-
+		return err
 	}
 	req, err := http.NewRequestWithContext(
 		ctx,
@@ -33,6 +32,9 @@ func (ac *APIClient) Process(ctx context.Context, job model.Job) error {
 		ac.baseURL,
 		bytes.NewReader(body),
 	)
+	if err != nil {
+		return err
+	}
 	resp, err := ac.client.Do(req)
 	if err != nil {
 		return err

@@ -13,53 +13,81 @@ import (
 type Server struct {
 	jobs      chan model.Job
 	wg        sync.WaitGroup
-	apiClient *APIClient
+	apiClient ApiClient
 }
 
 func NewServer(baseURL string) *Server {
 	return &Server{
 		jobs:      make(chan model.Job, 10),
-		apiClient: NewAPIClient(baseURL),
+		apiClient: *NewApiClient(baseURL),
 	}
 }
 
-func (s *Server) Shutdown() {
-	close(s.jobs)
-	s.wg.Wait()
+func (server *Server) Shutdown() {
+	close(server.jobs)
+	server.wg.Wait()
+
 }
 
-func (s *Server) PostMethodHanlder(w http.ResponseWriter, r *http.Request) {
+func (server *Server) PostMethodHandler(w http.ResponseWriter, r *http.Request) {
 	var job model.Job
 	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": err.Error(),
 		})
-		return
 	}
-	s.jobs <- job
+	server.jobs <- job
 	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "job accepted",
-		"id":      job.ID,
+		"message": "message accepted",
+		"job id":  job.ID,
 	})
 }
 
-func (s *Server) StartWorkers() {
+func (server *Server) StartWorkers() {
 	for i := 1; i <= 3; i++ {
-		s.wg.Add(1)
+		server.wg.Add(1)
 		go func(id int) {
-			defer s.wg.Done()
-			for job := range s.jobs {
+			defer server.wg.Done()
+			for job := range server.jobs {
+				var err error
 				fmt.Printf("Worker %d processing job %s\n", id, job.ID)
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				err := s.apiClient.Process(ctx, job)
-				cancel()
-				if err != nil {
-					fmt.Printf("Error calling external API on job %s", job.ID)
-					continue
+				for attempt := 1; attempt <= 3; attempt++ {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					err = server.apiClient.Process(ctx, job)
+					cancel()
+					if err == nil {
+						fmt.Printf("Worker %d finished job %s\n", id, job.ID)
+						break
+					}
+					fmt.Printf(
+						"Worker %d attempt %d failed for job %s: %v\n",
+						id,
+						attempt,
+						job.ID,
+						err,
+					)
+					if attempt < 3 {
+						backoff := time.Duration(attempt) * time.Second
+
+						fmt.Printf(
+							"Worker %d retrying job %s in %v\n",
+							id,
+							job.ID,
+							backoff,
+						)
+
+						time.Sleep(backoff)
+					}
 				}
-				fmt.Printf("Worker %d finished job %s\n", id, job.ID)
+				if err != nil {
+					fmt.Printf(
+						"Worker %d permanently failed job %s\n",
+						id,
+						job.ID,
+					)
+				}
 			}
 		}(i)
 	}
