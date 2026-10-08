@@ -78,7 +78,12 @@ func (server *Server) StartWorkers() {
 							backoff,
 						)
 
-						time.Sleep(backoff)
+						select {
+						case <-time.After(backoff):
+							break
+						case <-ctx.Done():
+							return
+						}
 					}
 				}
 				if err != nil {
